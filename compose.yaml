@@ -1,0 +1,82 @@
+name: hefesto-crm
+x-app: &app
+  image: hefesto-crm:24.0.2
+  build: .
+  restart: unless-stopped
+  environment: &environment
+    DOLI_INSTALL_AUTO: "1"
+    DOLI_INIT_DEMO: "0"
+    DOLI_PROD: "1"
+    DOLI_DB_TYPE: mysqli
+    DOLI_DB_HOST: db
+    DOLI_DB_HOST_PORT: "3306"
+    DOLI_DB_NAME: dolidb
+    DOLI_DB_USER: hefesto_crm
+    DOLI_DB_PASSWORD: ${DB_PASSWORD:?Generate .env}
+    DOLI_INSTANCE_UNIQUE_ID: ${INSTANCE_ID:?Generate .env}
+    DOLI_URL_ROOT: https://${CRM_HOST:?Set CRM_HOST}
+    DOLI_ADMIN_LOGIN: hefesto_admin
+    DOLI_ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Generate .env}
+    DOLI_COMPANY_NAME: ${COMPANY_NAME:-Hefesto CRM}
+    DOLI_COMPANY_COUNTRYCODE: CL
+    DOLI_ENABLE_MODULES: Societe,Propal,Projet,Agenda,Service,Commande,Export,Import,Cron
+    DOLI_CRON: "0"
+    DOLI_CRON_KEY: ${CRON_KEY:?Generate .env}
+    DOLI_CRON_USER: hefesto_admin
+    PHP_INI_DATE_TIMEZONE: America/Santiago
+    PHP_INI_MEMORY_LIMIT: 512M
+    PHP_INI_UPLOAD_MAX_FILESIZE: 32M
+    PHP_INI_POST_MAX_SIZE: 40M
+  volumes:
+    - documents:/var/www/documents
+    - custom:/var/www/html/custom
+  networks: [backend]
+services:
+  db:
+    image: mariadb:11.4
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: dolidb
+      MARIADB_USER: hefesto_crm
+      MARIADB_PASSWORD: ${DB_PASSWORD:?Generate .env}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Generate .env}
+    volumes: [database:/var/lib/mysql]
+    networks: [backend]
+    healthcheck:
+      test: [CMD, healthcheck.sh, --connect, --innodb_initialized]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+  web:
+    <<: *app
+    depends_on:
+      db: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, php, /opt/hefesto/health.php]
+      interval: 20s
+      timeout: 10s
+      retries: 30
+      start_period: 180s
+  cron:
+    <<: *app
+    environment:
+      <<: *environment
+      DOLI_CRON: "1"
+    depends_on:
+      web: {condition: service_healthy}
+    healthcheck: {disable: true}
+  proxy:
+    image: nginx:1.28-alpine
+    restart: unless-stopped
+    volumes: [./nginx.conf:/etc/nginx/conf.d/default.conf:ro]
+    expose: ["80"]
+    networks: [default, backend]
+    depends_on:
+      web: {condition: service_healthy}
+volumes:
+  database:
+  documents:
+  custom:
+networks:
+  backend:
+  default:

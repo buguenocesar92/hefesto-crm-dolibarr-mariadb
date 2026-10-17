@@ -1,0 +1,3 @@
+nombre,tipo,contacto,email,telefono,nota
+Empresa Demostracion A,prospecto,Ana Ejemplo,ana@example.invalid,,Datos ficticios; revisar mapeo en importador
+Empresa Demostracion B,prospecto,Luis Ejemplo,luis@example.invalid,,Datos ficticios; no enviar correos
