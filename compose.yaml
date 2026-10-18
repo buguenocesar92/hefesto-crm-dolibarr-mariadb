@@ -72,6 +72,11 @@ services:
     networks: [default, backend]
     depends_on:
       web: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1/healthz]
+      interval: 20s
+      timeout: 5s
+      retries: 5
 volumes:
   database:
   documents:
