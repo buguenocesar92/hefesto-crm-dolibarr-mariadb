@@ -32,7 +32,9 @@ for v in $vars; do
   esac
 done
 
-# 2) Renderizar con docker compose config --format json.
+# 2) Renderizar con docker compose config --format json. No usar -p: con -p se
+# sobreescribe el 'name:' de la raíz y la validación del punto 2 lo ocultaría.
+unset COMPOSE_PROJECT_NAME
 RENDER="$(docker compose --project-directory "$ROOT" -f "$COMPOSE" --env-file "$TMP_ENV" config --format json)"
 if [[ -z "$RENDER" || "$RENDER" == "null" ]]; then
   fail "docker compose config no devolvió JSON"
@@ -71,34 +73,48 @@ for svc in $SERVICES_WITHOUT_PROFILES; do
     fail "$svc: 'security_opt' con 'unconfined'"
   fi
   bind_sources=$(echo "$s" | jq -r '.volumes[]? | select(.type == "bind") | .source')
-  for src in $bind_sources; do
+  while IFS= read -r src; do
+    [[ -z "$src" ]] && continue
     case "$src" in
       /var/run/docker.sock|/run/docker.sock)
         fail "$svc: bindea docker.sock" ;;
+      "$ROOT"|"$ROOT"/*) ;;
+      *) fail "$svc: bind fuera del repo ($src)" ;;
     esac
-  done
+  done <<< "$bind_sources"
 done
 
-# 4) Punto 2 del contrato: sin 'name:' fijo. docker compose config siempre
-# añade un 'name' por defecto desde el directorio del proyecto, así que la
-# verificación es sobre el YAML fuente (no sobre el JSON renderizado).
-python3 - "$COMPOSE" <<'PY' || fail "compose: 'name:' fijo en el YAML fuente"
-import sys, yaml
-data = yaml.safe_load(open(sys.argv[1]).read())
-errs = []
-if isinstance(data, dict):
-    if data.get("name"):
-        errs.append("raíz")
-    for k, v in (data.get("networks") or {}).items():
-        if isinstance(v, dict) and v.get("name"):
-            errs.append(f"net {k}")
-    for k, v in (data.get("volumes") or {}).items():
-        if isinstance(v, dict) and v.get("name"):
-            errs.append(f"vol {k}")
-if errs:
-    print("name: fijo en: " + ", ".join(errs))
-    sys.exit(1)
-PY
+# 4) Punto 2 del contrato: sin 'name:' fijo en raíz ni en redes ni en volúmenes.
+# 'docker compose config' siempre rellena '.name' al renderizar; cuando el YAML
+# fuente no tiene 'name:', el nombre se calcula desde el directorio del proyecto
+# como `<project>_<key>` para redes y volúmenes. Detectamos un 'name:' fijo
+# comparando contra ese cálculo.
+EXP=$(basename "$ROOT" | tr 'A-Z' 'a-z' | tr -cd 'a-z0-9_-')
+render_name=$(echo "$RENDER" | jq -r '.name // ""')
+if [[ -z "$render_name" ]]; then
+  fail "compose: render sin campo .name (informe esto al mantenedor)"
+fi
+if [[ "$render_name" != "$EXP" ]]; then
+  fail "compose: name fijo en raíz (render=$render_name, esperado=$EXP)"
+fi
+while IFS= read -r entry; do
+  [[ -z "$entry" ]] && continue
+  k=$(echo "$entry" | jq -r '.key')
+  n=$(echo "$entry" | jq -r '.value.name // ""')
+  ext=$(echo "$entry" | jq -r '.value.external // false')
+  if [[ -n "$n" && "$ext" != "true" && "$n" != "${EXP}_${k}" ]]; then
+    fail "red $k: name fijo ($n, esperado=${EXP}_${k})"
+  fi
+done <<< "$(echo "$RENDER" | jq -c '.networks | to_entries[]?')"
+while IFS= read -r entry; do
+  [[ -z "$entry" ]] && continue
+  k=$(echo "$entry" | jq -r '.key')
+  n=$(echo "$entry" | jq -r '.value.name // ""')
+  ext=$(echo "$entry" | jq -r '.value.external // false')
+  if [[ -n "$n" && "$ext" != "true" && "$n" != "${EXP}_${k}" ]]; then
+    fail "volumen $k: name fijo ($n, esperado=${EXP}_${k})"
+  fi
+done <<< "$(echo "$RENDER" | jq -c '.volumes | to_entries[]?')"
 
 # 5) Diagnóstico: 'build' debe aparecer en un solo servicio.
 build_count=$(echo "$RENDER" | jq '[.services | to_entries[] | select(.value.build != null)] | length')
