@@ -23,6 +23,21 @@ Los módulos se solicitan al instalador nativo. Su activación y permisos deben 
 ## Despliegue en Coolify (MVP Hefesto)
 El compose está pensado para que Coolify lo levante como recurso Docker Compose detrás de Traefik: no publica puertos al host, no fija `name:` en raíz/redes/volúmenes ni `container_name` en servicios, y la directiva `build` queda solo en `web` (Coolify construye una vez y `cron` reusa esa imagen). Solo `proxy` recibe el dominio HTTPS y expone internamente el puerto 80. `scripts/coolify-check.sh` valida este contrato.
 
+Variables obligatorias del recurso Coolify (visor seguro, no en el repo):
+
+- `CRM_HOST`: solo el host del cliente (`crm.tudominio.cl`), sin esquema ni ruta; el compose antepone `https://`.
+- `DB_PASSWORD` y `DB_ROOT_PASSWORD`: contraseñas fuertes para MariaDB y root.
+- `ADMIN_PASSWORD`: contraseña inicial del usuario administrador sembrado por el instalador.
+- `INSTANCE_ID`: identificador único del despliegue; debe conservarse siempre (incluso en traspasos) porque firma cookies y rutas internas.
+- `CRON_KEY`: clave compartida entre `web` y `cron`; impedir lectura externa.
+- `COMPANY_NAME` (opcional): nombre comercial visible en la instalación; por defecto `Hefesto CRM`.
+
+El dominio HTTPS se asigna únicamente al servicio `proxy:80`. El servicio `proxy` (nginx) ya bloquea `/install` y `/install/` para impedir el instalador web. `db`, `web` y `cron` no reciben dominio ni puerto público.
+
+El correo sale desactivado mediante `MAIN_DISABLE_ALL_MAILS`: durante el primer arranque no se envía nada. El SMTP es opcional; cuando se necesite, se configura después desde la interfaz de Dolibarr (`Inicio → Configuración → Correo`) o sobre las variables del contenedor, sin tocar el compose.
+
+El primer acceso es con el usuario `hefesto_admin` y la contraseña `ADMIN_PASSWORD` definida arriba. Esa contraseña debe cambiarse antes de crear usuarios reales: el instalador la trata como credencial inicial, no como credencial duradera.
+
 ## Contenido
 - `compose.yaml`, Dockerfile y nginx.conf: despliegue.
 - `container/`: configuración inicial y healthcheck.
