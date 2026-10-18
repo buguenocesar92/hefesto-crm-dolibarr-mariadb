@@ -1,7 +1,5 @@
-name: hefesto-crm
 x-app: &app
   image: hefesto-crm:24.0.2
-  build: .
   restart: unless-stopped
   environment: &environment
     DOLI_INSTALL_AUTO: "1"
@@ -49,6 +47,7 @@ services:
       retries: 30
   web:
     <<: *app
+    build: .
     depends_on:
       db: {condition: service_healthy}
     healthcheck:

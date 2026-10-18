@@ -20,6 +20,9 @@ Preparado y revisado estáticamente. No ha sido construido ni ejecutado con Dock
 
 Los módulos se solicitan al instalador nativo. Su activación y permisos deben verificarse tras el primer arranque. Correos desactivados mediante MAIN_DISABLE_ALL_MAILS; no se envían mensajes durante instalación. No se incluyen pagos, integración Odoo, sincronización Supabase, firma electrónica ni DTE/SII. Las propuestas PDF son presupuestos comerciales, no documentos tributarios.
 
+## Despliegue en Coolify (MVP Hefesto)
+El compose está pensado para que Coolify lo levante como recurso Docker Compose detrás de Traefik: no publica puertos al host, no fija `name:` en raíz/redes/volúmenes ni `container_name` en servicios, y la directiva `build` queda solo en `web` (Coolify construye una vez y `cron` reusa esa imagen). Solo `proxy` recibe el dominio HTTPS y expone internamente el puerto 80. `scripts/coolify-check.sh` valida este contrato.
+
 ## Contenido
 - `compose.yaml`, Dockerfile y nginx.conf: despliegue.
 - `container/`: configuración inicial y healthcheck.
